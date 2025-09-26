@@ -11,7 +11,6 @@ export const signup = async (req, res) => {
             return res.status(400).json({ message: "All fields are required." });
         }
 
-        // ✅ Password strength validation (before hashing)
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{3,16}$/;
         if (!passwordRegex.test(password)) {
             return res.status(400).json({
@@ -31,16 +30,26 @@ export const signup = async (req, res) => {
             name,
             email,
             phoneNumber,
-            password,       // bcrypt will hash it in pre-save
+            password,
             agreeToTerms,
             otp,
             otpExpiry,
         });
 
-        // Send OTP email
-        await sendOTPEmail(email, otp);
+        // 🧨 Separate try-catch for sending email
+        try {
+            await sendOTPEmail(email, otp);
+        } catch (emailError) {
+            console.error("❌ Failed to send OTP email:", emailError);
 
-        // Generate JWT
+            // Optional cleanup if email sending fails
+            await User.findByIdAndDelete(user._id);
+
+            return res.status(500).json({
+                message: "Failed to send OTP email. Please try signing up again.",
+            });
+        }
+
         const token = jwt.sign(
             { userId: user._id, email: user.email, isVerified: user.isVerified },
             process.env.JWT_SECRET,
@@ -53,11 +62,10 @@ export const signup = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Signup Error:", error);
+        console.error("❌ Signup Error:", error);
         return res.status(500).json({ message: "Server error. Please try again later." });
     }
 };
-
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -98,4 +106,5 @@ export const login = async (req, res) => {
         return res.status(500).json({ message: "Server error. Please try again." });
     }
 };
+
 
